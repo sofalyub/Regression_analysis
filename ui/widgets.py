@@ -1198,8 +1198,13 @@ class ResultsWidget(QWidget):
             return ""
         
         if isinstance(value, (int, float)):
+            # Специальное форматирование для очень маленьких p-значений
+            if 0 < value < 1e-10:
+                return "<1,0×10⁻¹⁰"
+            elif 0 < value < 0.0001:
+                return "<0,0001"
             # Для очень больших чисел используем научную нотацию
-            if abs(value) >= 1e9:
+            elif abs(value) >= 1e9:
                 return f"{value:.2e}"
             # Для больших чисел округляем до целого
             elif abs(value) >= 1e6:
@@ -1209,10 +1214,10 @@ class ResultsWidget(QWidget):
                 return f"{value:,.2f}".replace(",", " ")
             # Для маленьких чисел используем 4-6 значащих цифр
             elif abs(value) >= 0.001:
-                return f"{value:.4f}"
+                return f"{value:.4f}".replace(".", ",")
             # Для очень маленьких чисел используем научную нотацию
             elif value != 0:
-                return f"{value:.4e}"
+                return f"{value:.4e}".replace(".", ",")
             else:
                 return "0"
         else:

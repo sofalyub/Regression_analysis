@@ -62,6 +62,19 @@ class MultipleRegression:
                 raise ValueError("Количество имен признаков должно совпадать с количеством столбцов в X")
             self.feature_names = feature_names
         
+        # Проверка на мультиколлинеарность
+        if n_features > 1:
+            correlation_matrix = np.corrcoef(X.T)
+            # Проверяем абсолютные значения корреляций (исключая диагональ)
+            off_diagonal_correlations = np.abs(correlation_matrix[np.triu_indices(n_features, k=1)])
+            high_correlations = off_diagonal_correlations > 0.95
+            
+            if np.any(high_correlations):
+                print(f"ПРЕДУПРЕЖДЕНИЕ: Обнаружена высокая корреляция между переменными:")
+                for i, j in zip(*np.triu_indices(n_features, k=1)):
+                    if abs(correlation_matrix[i, j]) > 0.95:
+                        print(f"  {self.feature_names[i]} и {self.feature_names[j]}: {correlation_matrix[i, j]:.4f}")
+        
         # Используем LinearRegression из scikit-learn для вычисления коэффициентов
         model = LinearRegression()
         model.fit(X, y)
@@ -82,6 +95,17 @@ class MultipleRegression:
         self.sum_of_squares_total = np.sum((y - mean_y) ** 2)  # SST
         self.sum_of_squares_residual = np.sum(self.residuals ** 2)  # SSE
         self.sum_of_squares_regression = self.sum_of_squares_total - self.sum_of_squares_residual  # SSR
+        
+        # Отладочная информация для сумм квадратов
+        print(f"DEBUG Суммы квадратов:")
+        print(f"  mean_y = {mean_y}")
+        print(f"  sum_of_squares_total = {self.sum_of_squares_total}")
+        print(f"  sum_of_squares_residual = {self.sum_of_squares_residual}")
+        print(f"  sum_of_squares_regression = {self.sum_of_squares_regression}")
+        print(f"  residuals_min = {np.min(self.residuals)}")
+        print(f"  residuals_max = {np.max(self.residuals)}")
+        print(f"  residuals_mean = {np.mean(self.residuals)}")
+        print(f"  residuals_std = {np.std(self.residuals)}")
         
         # Вычисляем коэффициент детерминации R²
         self.r_squared = 1 - (self.sum_of_squares_residual / self.sum_of_squares_total)
@@ -110,7 +134,32 @@ class MultipleRegression:
             self.f_statistic = ms_regression / ms_residual
             
             # Вычисляем значимость F (p-value)
-            self.f_significance = 1 - stats.f.cdf(self.f_statistic, df_regression, df_residual)
+            # Используем survival function для более точных результатов с очень большими F-статистиками
+            self.f_significance = stats.f.sf(self.f_statistic, df_regression, df_residual)
+            
+            # Проверка на числовую стабильность
+            if np.isnan(self.f_significance) or np.isinf(self.f_significance):
+                print(f"ПРЕДУПРЕЖДЕНИЕ: Проблема с числовой стабильностью F-статистики")
+                print(f"  f_statistic = {self.f_statistic}")
+                print(f"  df_regression = {df_regression}")
+                print(f"  df_residual = {df_residual}")
+                # Устанавливаем минимальное значение
+                self.f_significance = 1e-10
+            elif self.f_significance < 1e-10:
+                print(f"ПРЕДУПРЕЖДЕНИЕ: Очень маленькое p-значение F-статистики: {self.f_significance}")
+                # Ограничиваем минимальное значение для стабильности
+                self.f_significance = 1e-10
+            
+            # Отладочная информация
+            print(f"DEBUG F-статистика:")
+            print(f"  df_regression = {df_regression}")
+            print(f"  df_residual = {df_residual}")
+            print(f"  sum_of_squares_regression = {self.sum_of_squares_regression}")
+            print(f"  sum_of_squares_residual = {self.sum_of_squares_residual}")
+            print(f"  ms_regression = {ms_regression}")
+            print(f"  ms_residual = {ms_residual}")
+            print(f"  f_statistic = {self.f_statistic}")
+            print(f"  f_significance = {self.f_significance}")
         else:
             self.f_statistic = None
             self.f_significance = None
@@ -284,7 +333,7 @@ class MultipleRegression:
             "Качество модели": {
                 "R-квадрат": (
                     f"Значение {self.r_squared:.6f} показывает, что {self.r_squared*100:.2f}% вариации в Y "
-                    f"объясняется моделью. Это говорит о {'высоком' if self.r_squared > 0.7 else 'среднем' if self.r_squared > 0.5 else 'низком'} "
+                    f"объясняет моделью. Это говорит о {'высоком' if self.r_squared > 0.7 else 'среднем' if self.r_squared > 0.5 else 'низком'} "
                     f"качестве соответствия модели данным."
                 ),
                 "Скорректированный R-квадрат": (
